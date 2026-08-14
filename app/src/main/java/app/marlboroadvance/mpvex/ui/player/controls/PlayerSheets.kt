@@ -139,8 +139,16 @@ fun PlayerSheets(
           subtitlesPreferences.subtitlesFolder.set(uri.toString())
           // Immediately try to load the matching subtitle for the current video
           sheetScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            val name = `is`.xyz.mpv.MPVLib.getPropertyString("filename")
-              ?: viewModel.currentMediaTitle
+            // Prefer the resolved media title; mpv's 'filename' is just a
+            // number for fd:// sources (e.g. "10" for fd://10) and would
+            // match the wrong episode.
+            val mpvName = `is`.xyz.mpv.MPVLib.getPropertyString("filename")
+            val name = when {
+              viewModel.currentMediaTitle.isNotBlank() -> viewModel.currentMediaTitle
+              !mpvName.isNullOrBlank() && mpvName.contains('.') &&
+                !mpvName.all { it.isDigit() } -> mpvName
+              else -> return@launch
+            }
             val loaded = app.marlboroadvance.mpvex.utils.media.SubtitleFolderOps.autoloadFromFolder(
               context = sheetContext,
               folderUriString = uri.toString(),

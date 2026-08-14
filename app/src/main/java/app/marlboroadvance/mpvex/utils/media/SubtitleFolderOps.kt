@@ -165,6 +165,9 @@ object SubtitleFolderOps {
    */
   fun findBestMatch(videoFileName: String, subtitleNames: List<String>): Pair<String, Int>? {
     val videoBase = videoFileName.substringBeforeLast('.')
+    // Refuse degenerate names (e.g. "10" from an fd:// source): matching a
+    // bare number against episode lists would pick an arbitrary episode.
+    if (videoBase.isBlank() || videoBase.all { it.isDigit() }) return null
     val videoNorm = normalize(videoBase)
     val videoEp = extractEpisode(videoBase)
 

@@ -1779,12 +1779,17 @@ class PlayerActivity :
     val subtitlesFolderUri = subtitlesPreferences.subtitlesFolder.get()
     if (subtitlesFolderUri.isNotBlank()) {
       lifecycleScope.launch {
-        // Prefer the real on-disk filename; the display title can differ
-        // from the actual file (e.g. custom titles, content resolvers).
+        // Use the resolved display filename first. mpv's 'filename' property
+        // is unreliable for content/fd sources: for fd://10 it returns just
+        // "10", which then wrongly matches episode 10!
         val mpvFilename = MPVLib.getPropertyString("filename")
+        val mpvNameUsable = !mpvFilename.isNullOrBlank() &&
+          !mpvFilename.startsWith("fd:") &&
+          mpvFilename.contains('.') &&              // looks like a real file name
+          !mpvFilename.all { it.isDigit() }         // not a bare fd number
         val nameForMatching = when {
-          !mpvFilename.isNullOrBlank() && !mpvFilename.startsWith("fd:") -> mpvFilename
           fileName.isNotBlank() -> fileName
+          mpvNameUsable -> mpvFilename!!
           else -> return@launch
         }
 
