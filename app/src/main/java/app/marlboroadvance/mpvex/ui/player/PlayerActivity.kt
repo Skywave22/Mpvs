@@ -1784,7 +1784,9 @@ class PlayerActivity :
         )
         if (loaded != null) {
           withContext(Dispatchers.Main) {
-            viewModel.showToast(getString(R.string.subtitle_folder_loaded, loaded.take(40)))
+            viewModel.showToast(
+              getString(app.marlboroadvance.mpvex.R.string.subtitle_folder_loaded, loaded.take(40)),
+            )
           }
         }
       }
