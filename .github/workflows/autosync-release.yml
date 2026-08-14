@@ -1,0 +1,85 @@
+name: AutoSync Release (no secrets needed)
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'autosync-v*'
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'adopt'
+          java-version: 17
+          cache: 'gradle'
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Build standard release
+        run: ./gradlew assembleStandardRelease --stacktrace
+
+      - name: Sign APKs with self-generated key
+        run: |
+          set -e
+          RELEASE_DIR="app/build/outputs/apk/standard/release"
+
+          # Generate a one-off signing key (fine for personal sideloading)
+          keytool -genkeypair -v \
+            -keystore autosync.keystore \
+            -alias autosync \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass autosync123 -keypass autosync123 \
+            -dname "CN=AutoSync, OU=Personal, O=Personal, L=NA, S=NA, C=US"
+
+          BUILD_TOOLS=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -1)
+          echo "Using build tools: $BUILD_TOOLS"
+
+          find "$RELEASE_DIR" -name "app-standard-*-release-unsigned.apk" -type f | while read -r apk; do
+            signed_apk="${apk/-unsigned/}"
+            "$BUILD_TOOLS/zipalign" -f -p 4 "$apk" "$apk.aligned"
+            "$BUILD_TOOLS/apksigner" sign \
+              --ks autosync.keystore \
+              --ks-key-alias autosync \
+              --ks-pass pass:autosync123 \
+              --key-pass pass:autosync123 \
+              --out "$signed_apk" \
+              "$apk.aligned"
+            "$BUILD_TOOLS/apksigner" verify "$signed_apk"
+            rm "$apk" "$apk.aligned"
+          done
+
+          rm autosync.keystore
+          ls -lh "$RELEASE_DIR"
+
+      - name: Publish GitHub Release with APKs
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'autosync-latest' }}
+          name: "mpvEx with Subtitle Auto-Sync"
+          body: |
+            mpvEx with the new **Auto-sync with voice** feature.
+
+            The player listens to the audio, detects speech, compares it with the
+            subtitle timeline and fixes the subtitle delay automatically — one tap.
+
+            **Which APK to download?**
+            - Most phones (2019+): `app-standard-arm64-v8a-release.apk`
+            - Older phones: `app-standard-armeabi-v7a-release.apk`
+            - Not sure: `app-standard-universal-release.apk` (works everywhere, bigger)
+
+            Note: signed with a personal key for sideloading. If you have the
+            official mpvEx installed, uninstall it first (different signature).
+          files: |
+            app/build/outputs/apk/standard/release/app-standard-*-release.apk
