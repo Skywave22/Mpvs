@@ -71,11 +71,44 @@ object SubtitleFolderOps {
       val localPath = materialize(context, uri, matchName) ?: return@withContext null
 
       MPVLib.command("sub-add", localPath, "select", matchName)
+      lastLoadedPath = localPath
       matchName
     } catch (e: Exception) {
       Log.e(TAG, "Subtitle folder autoload failed", e)
       null
     }
+  }
+
+  /** Absolute path of the most recently folder-loaded subtitle file. */
+  @Volatile
+  var lastLoadedPath: String? = null
+    private set
+
+  /**
+   * Makes sure the folder-loaded subtitle is the ACTIVE track. The app's
+   * playback-state restore can overwrite the selection shortly after the
+   * track is added, so callers invoke this again after a short delay.
+   * Returns true when the track is (now) selected.
+   */
+  fun ensureSelected(): Boolean {
+    val path = lastLoadedPath ?: return false
+    val count = MPVLib.getPropertyInt("track-list/count") ?: 0
+    for (i in 0 until count) {
+      if (MPVLib.getPropertyString("track-list/$i/type") != "sub") continue
+      val external = MPVLib.getPropertyBoolean("track-list/$i/external") ?: false
+      if (!external) continue
+      val fname = MPVLib.getPropertyString("track-list/$i/external-filename") ?: continue
+      if (fname == path || fname.endsWith(path.substringAfterLast('/'))) {
+        val id = MPVLib.getPropertyInt("track-list/$i/id") ?: continue
+        val currentSid = MPVLib.getPropertyInt("sid") ?: 0
+        if (currentSid != id) {
+          MPVLib.setPropertyInt("sid", id)
+          Log.d(TAG, "Re-selected folder subtitle track id=$id (was sid=$currentSid)")
+        }
+        return true
+      }
+    }
+    return false
   }
 
   /**

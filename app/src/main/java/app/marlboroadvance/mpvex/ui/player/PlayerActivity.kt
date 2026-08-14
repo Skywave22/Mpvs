@@ -47,6 +47,7 @@ import app.marlboroadvance.mpvex.ui.player.controls.PlayerControls
 import app.marlboroadvance.mpvex.ui.theme.MpvexTheme
 import app.marlboroadvance.mpvex.utils.history.RecentlyPlayedOps
 import app.marlboroadvance.mpvex.utils.media.HttpUtils
+import app.marlboroadvance.mpvex.utils.media.SubtitleAutoSync
 import app.marlboroadvance.mpvex.utils.media.SubtitleFolderOps
 import app.marlboroadvance.mpvex.utils.media.SubtitleOps
 import app.marlboroadvance.mpvex.utils.storage.FileTypeUtils
@@ -1648,6 +1649,7 @@ class PlayerActivity :
    * applies user preferences, and sets up metadata and media session.
    */
   private fun handleFileLoaded() {
+    autoSyncRanForThisFile = false
     // Extract fileName from intent only if not already set
     // This preserves fileName set in onNewIntent or onCreate
     if (fileName.isBlank()) {
@@ -1788,6 +1790,26 @@ class PlayerActivity :
               getString(app.marlboroadvance.mpvex.R.string.subtitle_folder_loaded, loaded.take(40)),
             )
           }
+          // The saved playback state restore may overwrite the track
+          // selection moments after we add the sub; re-assert it a few
+          // times until playback settles.
+          repeat(3) {
+            kotlinx.coroutines.delay(1500)
+            withContext(Dispatchers.Main) { SubtitleFolderOps.ensureSelected() }
+          }
+          // Then sync it against the actual voices automatically.
+          if (subtitlesPreferences.autoSyncSubtitles.get()) {
+            runAutomaticSubtitleSync()
+          }
+        }
+      }
+    } else if (subtitlesPreferences.autoSyncSubtitles.get()) {
+      // No subtitle folder set: still auto-sync if an external subtitle
+      // gets picked up by the regular same-directory autoload.
+      lifecycleScope.launch {
+        kotlinx.coroutines.delay(5000)
+        if (SubtitleAutoSync.currentExternalSubtitlePath() != null) {
+          runAutomaticSubtitleSync()
         }
       }
     }
@@ -1806,6 +1828,67 @@ class PlayerActivity :
    * Fetches a better title from HTTP headers for network streams asynchronously.
    * Updates the title in UI, MPV, and media session if a better name is found.
    */
+  /**
+   * Fully automatic subtitle synchronization: waits for playback to settle,
+   * then listens to the audio, detects speech, cross-correlates it with the
+   * active external subtitle and applies the measured sub-delay. Runs without
+   * any user interaction; failures are silent (the manual button remains
+   * available in the Subtitle Delay panel).
+   */
+  private var autoSyncRanForThisFile = false
+
+  private fun runAutomaticSubtitleSync() {
+    if (autoSyncRanForThisFile) return
+    autoSyncRanForThisFile = true
+
+    lifecycleScope.launch(Dispatchers.IO) {
+      try {
+        // Give the player a moment so duration/track info are stable.
+        kotlinx.coroutines.delay(2000)
+
+        val subtitlePath = SubtitleAutoSync.currentExternalSubtitlePath() ?: return@launch
+        val videoSource = MPVLib.getPropertyString("path") ?: return@launch
+        val duration = MPVLib.getPropertyDouble("duration") ?: 0.0
+        if (duration < 120.0) return@launch // too short to analyze reliably
+
+        // Scan a dialogue-likely window: skip openings, don't run past the end.
+        val scanLen = 150.0
+        var scanStart = minOf(160.0, duration * 0.15)
+        if (scanStart + scanLen > duration - 5) {
+          scanStart = (duration - scanLen - 5).coerceAtLeast(0.0)
+        }
+
+        val result = SubtitleAutoSync.run(
+          context = this@PlayerActivity,
+          videoSource = videoSource,
+          subtitleSource = subtitlePath,
+          scanStartSec = scanStart,
+          scanLenSec = scanLen,
+        )
+
+        // Only apply automatically when we're reasonably confident and the
+        // correction is meaningful (>0.3s off).
+        if (result.confidence != SubtitleAutoSync.Confidence.LOW &&
+          kotlin.math.abs(result.subsWereLateBySeconds) > 0.3
+        ) {
+          withContext(Dispatchers.Main) {
+            MPVLib.setPropertyDouble("sub-delay", result.offsetSeconds)
+            viewModel.showToast(
+              getString(
+                app.marlboroadvance.mpvex.R.string.subtitle_auto_synced,
+                kotlin.math.abs(result.subsWereLateBySeconds),
+              ),
+            )
+          }
+        } else {
+          Log.d(TAG, "Auto-sync: no correction applied (confidence=${result.confidence}, offset=${result.subsWereLateBySeconds})")
+        }
+      } catch (e: Exception) {
+        Log.w(TAG, "Automatic subtitle sync failed silently", e)
+      }
+    }
+  }
+
   private fun fetchNetworkStreamTitle() {
     lifecycleScope.launch(Dispatchers.IO) {
       try {

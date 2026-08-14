@@ -193,6 +193,9 @@
   <string name="pref_subtitles_folder_summary">Auto-load matching subtitles for every episode from this folder</string>
   <string name="pref_subtitles_folder_not_set">Not set</string>
   <string name="subtitle_folder_loaded">Subtitle loaded: %1$s</string>
+  <string name="subtitle_auto_synced">Subtitles auto-synced (were %1$.1fs off)</string>
+  <string name="pref_subtitles_autosync_title">Auto-sync subtitles with voice</string>
+  <string name="pref_subtitles_autosync_summary">Automatically fix subtitle timing by listening to the audio when a subtitle is loaded</string>
   <string name="pref_subtitles_autoload_summary">Automatically load external subtitles with the same name.</string>
   <string name="pref_subtitles_save_location">Subtitle Save Location</string>
   <string name="pref_subtitles_search_online">Online Subtitle Search…</string>

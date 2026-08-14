@@ -302,6 +302,21 @@ object SubtitlesPreferencesScreen : Screen {
 
               PreferenceDivider()
 
+              val autoSync by preferences.autoSyncSubtitles.collectAsState()
+              SwitchPreference(
+                value = autoSync,
+                onValueChange = { preferences.autoSyncSubtitles.set(it) },
+                title = { Text(stringResource(R.string.pref_subtitles_autosync_title)) },
+                summary = {
+                  Text(
+                    stringResource(R.string.pref_subtitles_autosync_summary),
+                    color = MaterialTheme.colorScheme.outline,
+                  )
+                },
+              )
+
+              PreferenceDivider()
+
               val overrideAss by preferences.overrideAssSubs.collectAsState()
               SwitchPreference(
                 value = overrideAss,
