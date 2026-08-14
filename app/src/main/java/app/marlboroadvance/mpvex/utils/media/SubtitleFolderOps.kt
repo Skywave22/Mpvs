@@ -181,11 +181,12 @@ object SubtitleFolderOps {
         score = 1000
       } else {
         val subNorm = normalize(subBase)
-        // 2) normalized equality / containment
+        // 2) normalized equality / containment (whole-word only, so that
+        //    "bleach 10" can never match inside "bleach 1080p ...")
         if (subNorm == videoNorm && subNorm.isNotBlank()) {
           score = 900
         } else if (subNorm.isNotBlank() && videoNorm.isNotBlank() &&
-          (subNorm.contains(videoNorm) || videoNorm.contains(subNorm))
+          (" $subNorm ".contains(" $videoNorm ") || " $videoNorm ".contains(" $subNorm "))
         ) {
           score = 600
         }
@@ -233,13 +234,17 @@ object SubtitleFolderOps {
       .replace(Regex("""\[[^\]]*]"""), " ")
       .replace(Regex("""\([^)]*\)"""), " ")
 
+    // Underscores and dots are common separators (Bleach_S01_E68, show.ep.5).
+    // Convert them to spaces so \b boundaries and \s gaps work as expected.
+    name = name.replace('_', ' ').replace('.', ' ')
+
     // strip common noise tokens so their digits don't confuse us
     name = name.replace(
       Regex("""(?i)\b(480p|720p|1080p|2160p|4k|x264|x265|h264|h265|hevc|10bit|8bit|bluray|bdrip|webrip|web-dl|hdtv|aac|flac|dual[- ]?audio|v2)\b"""),
       " ",
     )
 
-    // S01E05 / s1e5
+    // S01E05 / s1e5 / S01 E68 (separators already converted to spaces)
     Regex("""(?i)\bs(\d{1,2})\s*e(\d{1,3})\b""").find(name)?.let {
       return EpisodeInfo(it.groupValues[1].toInt(), it.groupValues[2].toInt())
     }
