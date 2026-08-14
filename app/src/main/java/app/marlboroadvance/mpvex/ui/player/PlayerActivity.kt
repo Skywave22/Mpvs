@@ -1779,10 +1779,19 @@ class PlayerActivity :
     val subtitlesFolderUri = subtitlesPreferences.subtitlesFolder.get()
     if (subtitlesFolderUri.isNotBlank()) {
       lifecycleScope.launch {
+        // Prefer the real on-disk filename; the display title can differ
+        // from the actual file (e.g. custom titles, content resolvers).
+        val mpvFilename = MPVLib.getPropertyString("filename")
+        val nameForMatching = when {
+          !mpvFilename.isNullOrBlank() && !mpvFilename.startsWith("fd:") -> mpvFilename
+          fileName.isNotBlank() -> fileName
+          else -> return@launch
+        }
+
         val loaded = SubtitleFolderOps.autoloadFromFolder(
           context = this@PlayerActivity,
           folderUriString = subtitlesFolderUri,
-          videoFileName = fileName,
+          videoFileName = nameForMatching,
         )
         if (loaded != null) {
           withContext(Dispatchers.Main) {
@@ -1800,6 +1809,16 @@ class PlayerActivity :
           // Then sync it against the actual voices automatically.
           if (subtitlesPreferences.autoSyncSubtitles.get()) {
             runAutomaticSubtitleSync()
+          }
+        } else {
+          // Tell the user why nothing appeared instead of failing silently.
+          withContext(Dispatchers.Main) {
+            viewModel.showToast(
+              getString(
+                app.marlboroadvance.mpvex.R.string.subtitle_folder_no_match,
+                nameForMatching.take(40),
+              ),
+            )
           }
         }
       }

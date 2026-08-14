@@ -34,7 +34,8 @@ fun SubtitlesSheet(
   onRemoveSubtitle: (Int) -> Unit,
   onOpenOnlineSearch: () -> Unit,
   onDismissRequest: () -> Unit,
-  modifier: Modifier = Modifier
+  modifier: Modifier = Modifier,
+  onPickSubtitlesFolder: (() -> Unit)? = null,
 ) {
   val items = remember(tracks) {
     val list = mutableListOf<SubtitleItem>()
@@ -63,6 +64,11 @@ fun SubtitlesSheet(
         stringResource(R.string.player_sheets_add_ext_sub),
         onAddSubtitle,
         actions = {
+          if (onPickSubtitlesFolder != null) {
+            IconButton(onClick = onPickSubtitlesFolder) {
+              Icon(Icons.Default.FolderOpen, null)
+            }
+          }
           IconButton(onClick = onOpenOnlineSearch) {
             Icon(Icons.Default.Search, null)
           }

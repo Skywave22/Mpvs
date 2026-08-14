@@ -52,11 +52,11 @@ object SubtitleFolderOps {
         ?: return@withContext null
       if (!folder.isDirectory) return@withContext null
 
-      val candidates = folder.listFiles().mapNotNull { f ->
-        val name = f.name ?: return@mapNotNull null
-        val ext = name.substringAfterLast('.', "").lowercase(Locale.ROOT)
-        if (f.isFile && ext in SUB_EXTENSIONS) name to f.uri else null
-      }
+      // Scan recursively: users often pick a parent folder and the actual
+      // subtitle files live in a subfolder (e.g. an extracted zip's folder).
+      val candidates = ArrayList<Pair<String, Uri>>()
+      collectSubtitleFiles(folder, depth = 0, out = candidates)
+      Log.d(TAG, "Found ${candidates.size} subtitle files in selected folder (recursive)")
       if (candidates.isEmpty()) {
         Log.d(TAG, "No subtitle files in selected folder")
         return@withContext null
@@ -83,6 +83,24 @@ object SubtitleFolderOps {
   @Volatile
   var lastLoadedPath: String? = null
     private set
+
+  /** Recursively collects subtitle files up to 3 levels deep. */
+  private fun collectSubtitleFiles(
+    dir: DocumentFile,
+    depth: Int,
+    out: MutableList<Pair<String, Uri>>,
+  ) {
+    if (depth > 3 || out.size > 2000) return
+    for (f in dir.listFiles()) {
+      val name = f.name ?: continue
+      if (f.isDirectory) {
+        collectSubtitleFiles(f, depth + 1, out)
+      } else if (f.isFile) {
+        val ext = name.substringAfterLast('.', "").lowercase(Locale.ROOT)
+        if (ext in SUB_EXTENSIONS) out.add(name to f.uri)
+      }
+    }
+  }
 
   /**
    * Makes sure the folder-loaded subtitle is the ACTIVE track. The app's

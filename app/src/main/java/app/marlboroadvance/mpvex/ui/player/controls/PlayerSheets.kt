@@ -27,6 +27,7 @@ import app.marlboroadvance.mpvex.utils.media.MediaInfoParser
 import dev.vivvvek.seeker.Segment
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import androidx.compose.runtime.collectAsState as composeCollectAsState
 import androidx.compose.runtime.mutableStateOf
@@ -124,6 +125,47 @@ fun PlayerSheets(
           )
       }
 
+      val sheetContext = androidx.compose.ui.platform.LocalContext.current
+      val sheetScope = androidx.compose.runtime.rememberCoroutineScope()
+      val subtitlesFolderPicker =
+        rememberLauncherForActivityResult(
+          app.marlboroadvance.mpvex.utils.media.OpenDocumentTreeContract(),
+        ) { uri ->
+          if (uri == null) return@rememberLauncherForActivityResult
+          sheetContext.contentResolver.takePersistableUriPermission(
+            uri,
+            android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION,
+          )
+          subtitlesPreferences.subtitlesFolder.set(uri.toString())
+          // Immediately try to load the matching subtitle for the current video
+          sheetScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val name = `is`.xyz.mpv.MPVLib.getPropertyString("filename")
+              ?: viewModel.currentMediaTitle
+            val loaded = app.marlboroadvance.mpvex.utils.media.SubtitleFolderOps.autoloadFromFolder(
+              context = sheetContext,
+              folderUriString = uri.toString(),
+              videoFileName = name,
+            )
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+              if (loaded != null) {
+                viewModel.showToast(
+                  sheetContext.getString(
+                    app.marlboroadvance.mpvex.R.string.subtitle_folder_loaded,
+                    loaded.take(40),
+                  ),
+                )
+              } else {
+                viewModel.showToast(
+                  sheetContext.getString(
+                    app.marlboroadvance.mpvex.R.string.subtitle_folder_no_match,
+                    name.take(40),
+                  ),
+                )
+              }
+            }
+          }
+        }
+
       SubtitlesSheet(
         tracks = subtitles.toImmutableList(),
         onToggleSubtitle = onToggleSubtitle,
@@ -133,7 +175,8 @@ fun PlayerSheets(
         onOpenSubtitleSettings = { onOpenPanel(Panels.SubtitleSettings) },
         onOpenSubtitleDelay = { onOpenPanel(Panels.SubtitleDelay) },
         onOpenOnlineSearch = { onShowSheet(Sheets.OnlineSubtitleSearch) },
-        onDismissRequest = onDismissRequest
+        onDismissRequest = onDismissRequest,
+        onPickSubtitlesFolder = { subtitlesFolderPicker.launch(null) },
       )
     }
 
