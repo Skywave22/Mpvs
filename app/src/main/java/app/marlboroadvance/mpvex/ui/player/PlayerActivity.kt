@@ -1,4 +1,4 @@
-﻿package app.marlboroadvance.mpvex.ui.player
+package app.marlboroadvance.mpvex.ui.player
 
 import android.content.BroadcastReceiver
 import android.content.ComponentName
@@ -47,6 +47,7 @@ import app.marlboroadvance.mpvex.ui.player.controls.PlayerControls
 import app.marlboroadvance.mpvex.ui.theme.MpvexTheme
 import app.marlboroadvance.mpvex.utils.history.RecentlyPlayedOps
 import app.marlboroadvance.mpvex.utils.media.HttpUtils
+import app.marlboroadvance.mpvex.utils.media.SubtitleFolderOps
 import app.marlboroadvance.mpvex.utils.media.SubtitleOps
 import app.marlboroadvance.mpvex.utils.storage.FileTypeUtils
 import app.marlboroadvance.mpvex.utils.storage.FileFilterUtils
@@ -1766,6 +1767,24 @@ class PlayerActivity :
               videoFilePath = filePath,
               videoFileName = fileName,
             )
+          }
+        }
+      }
+    }
+
+    // Autoload from the user-selected subtitles folder (works for every
+    // source, including content:// and fd:// where directory scanning fails)
+    val subtitlesFolderUri = subtitlesPreferences.subtitlesFolder.get()
+    if (subtitlesFolderUri.isNotBlank()) {
+      lifecycleScope.launch {
+        val loaded = SubtitleFolderOps.autoloadFromFolder(
+          context = this@PlayerActivity,
+          folderUriString = subtitlesFolderUri,
+          videoFileName = fileName,
+        )
+        if (loaded != null) {
+          withContext(Dispatchers.Main) {
+            viewModel.showToast(getString(R.string.subtitle_folder_loaded, loaded.take(40)))
           }
         }
       }

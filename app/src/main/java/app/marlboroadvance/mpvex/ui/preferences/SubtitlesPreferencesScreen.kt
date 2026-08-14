@@ -2,6 +2,7 @@ package app.marlboroadvance.mpvex.ui.preferences
 
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.core.net.toUri
 import androidx.documentfile.provider.DocumentFile
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -230,6 +231,74 @@ object SubtitlesPreferencesScreen : Screen {
                   )
                 },
               )
+
+              PreferenceDivider()
+
+              // Subtitles folder: pick once, matching subtitles are loaded
+              // automatically for every episode
+              val subtitlesFolder by preferences.subtitlesFolder.collectAsState()
+              val subtitlesFolderPicker =
+                rememberLauncherForActivityResult(
+                  OpenDocumentTreeContract(),
+                ) { uri ->
+                  if (uri == null) return@rememberLauncherForActivityResult
+                  val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+                  context.contentResolver.takePersistableUriPermission(uri, flags)
+                  preferences.subtitlesFolder.set(uri.toString())
+                }
+              Row(
+                modifier =
+                  Modifier
+                    .fillMaxWidth()
+                    .clickable { subtitlesFolderPicker.launch(null) }
+                    .padding(vertical = 16.dp, horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+              ) {
+                Column(modifier = Modifier.weight(1f)) {
+                  Text(
+                    stringResource(R.string.pref_subtitles_folder_title),
+                    style = MaterialTheme.typography.titleMedium,
+                  )
+                  if (subtitlesFolder.isBlank()) {
+                    Text(
+                      stringResource(R.string.pref_subtitles_folder_not_set),
+                      style = MaterialTheme.typography.bodyMedium,
+                      color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                  } else {
+                    val displayName =
+                      remember(subtitlesFolder) {
+                        try {
+                          DocumentFile.fromTreeUri(context, subtitlesFolder.toUri())?.name
+                            ?: subtitlesFolder.toUri().lastPathSegment?.substringAfterLast(':')
+                            ?: subtitlesFolder
+                        } catch (e: Exception) {
+                          subtitlesFolder
+                        }
+                      }
+                    Text(
+                      displayName,
+                      style = MaterialTheme.typography.bodyMedium,
+                      color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                      stringResource(R.string.pref_subtitles_folder_summary),
+                      style = MaterialTheme.typography.bodySmall,
+                      color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    )
+                  }
+                }
+                if (subtitlesFolder.isNotBlank()) {
+                  IconButton(onClick = { preferences.subtitlesFolder.set("") }) {
+                    Icon(
+                      Icons.Default.Clear,
+                      contentDescription = null,
+                      tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                  }
+                }
+              }
 
               PreferenceDivider()
 
